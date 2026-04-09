@@ -61,7 +61,8 @@ def convert_file(src_filepath, dst_filepath, src_folder, dst_folder, cfg='s2twp.
                     .replace('真即時間', '真實時間')        # 优先按"实时"解析了？
                     .replace('面向物件', '物件導向')
                     .replace('非規範化', '反正規化')
-                    .replace('規範化', '正規化'),
+                    .replace('規範化', '正規化')
+                    .replace('隻影響', '只影響'),
                 src_folder, dst_folder
             )
             for line in src))
