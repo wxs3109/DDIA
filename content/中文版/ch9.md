@@ -6,7 +6,7 @@ breadcrumbs: false
 
 <a id="ch_distributed"></a>
 
-![](/map/ch08.png)
+<img src="../../static/map/ch08.png" alt="章节导图" style="display: block; margin: 1rem auto; width: 100%; max-width: 720px;" />
 
 > *意外这东西挺有意思：你没碰上之前，它就从来不会发生。*
 >
@@ -53,7 +53,11 @@ breadcrumbs: false
 5. 远程节点可能已经处理了你的请求，但响应在网络上丢失了（也许网络交换机配置错误）。
 6. 远程节点可能已经处理了你的请求，但响应被延迟了，稍后将被交付（也许网络或你自己的机器过载）。
 
-{{< figure src="/fig/ddia_0901.png" id="fig_distributed_network" caption="图 9-1. 如果你发送请求但没有收到响应，无法区分是 (a) 请求丢失了，(b) 远程节点宕机了，还是 (c) 响应丢失了。" class="w-full my-4" >}}
+<a id="fig_distributed_network"></a>
+
+图 9-1. 如果你发送请求但没有收到响应，无法区分是 (a) 请求丢失了，(b) 远程节点宕机了，还是 (c) 响应丢失了。
+
+<img src="../../static/fig/ddia_0901.png" alt="图 9-1. 如果你发送请求但没有收到响应，无法区分是 (a) 请求丢失了，(b) 远程节点宕机了，还是 (c) 响应丢失了。" style="display: block; margin: 1rem auto; width: 100%; max-width: 720px;" />
 
 
 发送方甚至无法判断数据包是否已交付：唯一的选择是让接收方发送响应消息，而响应消息本身也可能丢失或延迟。在异步网络中，这些问题是无法区分的：你拥有的唯一信息是你还没有收到响应。如果你向另一个节点发送请求但没有收到响应，*不可能* 判断原因。
@@ -147,7 +151,11 @@ TCP 通常被描述为提供 "可靠" 的交付，从某种意义上说，它检
 * 在虚拟化环境中，正在运行的操作系统经常会暂停几十毫秒，而另一个虚拟机使用 CPU 核心。在此期间，VM 无法消耗来自网络的任何数据，因此传入数据由虚拟机监视器排队（缓冲）[^29]，进一步增加了网络延迟的可变性。
 * 如前所述，为了避免网络过载，TCP 限制发送数据的速率。这意味着在数据甚至进入网络之前，发送方就有额外的排队。
 
-{{< figure src="/fig/ddia_0902.png" id="fig_distributed_switch_queueing" caption="图 9-2. 如果几台机器向同一目的地发送网络流量，其交换机队列可能会满。这里，端口 1、2 和 4 都试图向端口 3 发送数据包。" class="w-full my-4" >}}
+<a id="fig_distributed_switch_queueing"></a>
+
+图 9-2. 如果几台机器向同一目的地发送网络流量，其交换机队列可能会满。这里，端口 1、2 和 4 都试图向端口 3 发送数据包。
+
+<img src="../../static/fig/ddia_0902.png" alt="图 9-2. 如果几台机器向同一目的地发送网络流量，其交换机队列可能会满。这里，端口 1、2 和 4 都试图向端口 3 发送数据包。" style="display: block; margin: 1rem auto; width: 100%; max-width: 720px;" />
 
 此外，当 TCP 检测到并自动重传丢失的数据包时，尽管应用程序不会直接看到数据包丢失，但它确实会看到由此产生的延迟（等待超时到期，然后等待重传的数据包被确认）。
 
@@ -295,7 +303,11 @@ TCP 通常被描述为提供 "可靠" 的交付，从某种意义上说，它检
 
 [图 9-3](#fig_distributed_timestamps) 说明了在具有多主复制的数据库中日历时钟的危险使用（该示例类似于 [图 6-8](/ch6#fig_replication_causality)）。客户端 A 在节点 1 上写入 *x* = 1；写入被复制到节点 3；客户端 B 在节点 3 上递增 *x*（我们现在有 *x* = 2）；最后，两个写入都被复制到节点 2。
 
-{{< figure src="/fig/ddia_0903.png" id="fig_distributed_timestamps" caption="图 9-3. 客户端 B 的写入在因果关系上晚于客户端 A 的写入，但 B 的写入具有更早的时间戳。" class="w-full my-4" >}}
+<a id="fig_distributed_timestamps"></a>
+
+图 9-3. 客户端 B 的写入在因果关系上晚于客户端 A 的写入，但 B 的写入具有更早的时间戳。
+
+<img src="../../static/fig/ddia_0903.png" alt="图 9-3. 客户端 B 的写入在因果关系上晚于客户端 A 的写入，但 B 的写入具有更早的时间戳。" style="display: block; margin: 1rem auto; width: 100%; max-width: 720px;" />
 
 
 在 [图 9-3](#fig_distributed_timestamps) 中，当写入被复制到其他节点时，它会根据写入起源节点上的日历时钟标记时间戳。此示例中的时钟同步非常好：节点 1 和节点 3 之间的偏差小于 3 毫秒，这可能比你在实践中可以期望的要好。
@@ -465,14 +477,22 @@ while (true) {
 
 例如，[图 9-4](#fig_distributed_lease_pause) 显示了由于锁的错误实现导致的数据损坏错误。（该错误不是理论上的：HBase 曾经有这个问题 [^85] [^86]。）假设你想确保存储服务中的文件一次只能由一个客户端访问，因为如果多个客户端试图写入它，文件将被损坏。你尝试通过要求客户端在访问文件之前从锁服务获取租约来实现这一点。这种锁服务通常使用共识算法实现；我们将在 [第 10 章](/ch10#ch_consistency) 中进一步讨论这一点。
 
-{{< figure src="/fig/ddia_0904.png" id="fig_distributed_lease_pause" caption="图 9-4. 分布式锁的错误实现：客户端 1 认为它仍然有有效的租约，即使它已经过期，因此损坏了存储中的文件。" class="w-full my-4" >}}
+<a id="fig_distributed_lease_pause"></a>
+
+图 9-4. 分布式锁的错误实现：客户端 1 认为它仍然有有效的租约，即使它已经过期，因此损坏了存储中的文件。
+
+<img src="../../static/fig/ddia_0904.png" alt="图 9-4. 分布式锁的错误实现：客户端 1 认为它仍然有有效的租约，即使它已经过期，因此损坏了存储中的文件。" style="display: block; margin: 1rem auto; width: 100%; max-width: 720px;" />
 
 
 问题是我们在 ["进程暂停"](#sec_distributed_clocks_pauses) 中讨论的一个例子：如果持有租约的客户端暂停太久，其租约就会过期。另一个客户端可以获得同一文件的租约，并开始写入文件。当暂停的客户端回来时，它（错误地）认为它仍然有有效的租约，并继续写入文件。我们现在有了脑裂情况：客户端的写入冲突并损坏了文件。
 
 [图 9-5](#fig_distributed_lease_delay) 显示了具有类似后果的另一个问题。在这个例子中没有进程暂停，只有客户端 1 的崩溃。就在客户端 1 崩溃之前，它向存储服务发送了一个写请求，但这个请求在网络中被延迟了很长时间。（请记住 ["实践中的网络故障"](#sec_distributed_network_faults)，数据包有时可能会延迟一分钟或更长时间。）当写请求到达存储服务时，租约已经超时，允许客户端 2 获取它并发出自己的写入。结果是类似于 [图 9-4](#fig_distributed_lease_pause) 的损坏。
 
-{{< figure src="/fig/ddia_0905.png" id="fig_distributed_lease_delay" caption="图 9-5. 来自前租约持有者的消息可能会延迟很长时间，并在另一个节点接管租约后到达。" class="w-full my-4" >}}
+<a id="fig_distributed_lease_delay"></a>
+
+图 9-5. 来自前租约持有者的消息可能会延迟很长时间，并在另一个节点接管租约后到达。
+
+<img src="../../static/fig/ddia_0905.png" alt="图 9-5. 来自前租约持有者的消息可能会延迟很长时间，并在另一个节点接管租约后到达。" style="display: block; margin: 1rem auto; width: 100%; max-width: 720px;" />
 
 
 #### 隔离僵尸进程和延迟请求 {#sec_distributed_fencing_tokens}
@@ -483,7 +503,11 @@ while (true) {
 
 一个更强大的隔离解决方案，可以防范僵尸和延迟请求，如 [图 9-6](#fig_distributed_fencing) 所示。
 
-{{< figure src="/fig/ddia_0906.png" id="fig_distributed_fencing" caption="图 9-6. 通过只允许按递增隔离令牌顺序写入来使存储访问安全。" class="w-full my-4" >}}
+<a id="fig_distributed_fencing"></a>
+
+图 9-6. 通过只允许按递增隔离令牌顺序写入来使存储访问安全。
+
+<img src="../../static/fig/ddia_0906.png" alt="图 9-6. 通过只允许按递增隔离令牌顺序写入来使存储访问安全。" style="display: block; margin: 1rem auto; width: 100%; max-width: 720px;" />
 
 
 假设每次锁服务授予锁或租约时，它还返回一个 *隔离令牌*，这是一个每次授予锁时都会增加的数字（例如，由锁服务递增）。然后我们可以要求客户端每次向存储服务发送写请求时，都必须包含其当前的隔离令牌。
@@ -509,7 +533,11 @@ while (true) {
 
 如 [图 9-7](#fig_distributed_fencing_leaderless) 所示，你可以将写入者的隔离令牌放在时间戳的最高有效位或数字中。然后你可以确保新租约持有者生成的任何时间戳都将大于旧租约持有者的任何时间戳，即使旧租约持有者的写入发生得更晚。
 
-{{< figure src="/fig/ddia_0907.png" id="fig_distributed_fencing_leaderless" caption="图 9-7. 使用隔离令牌保护对无主复制数据库的写入。" class="w-full my-4" >}}
+<a id="fig_distributed_fencing_leaderless"></a>
+
+图 9-7. 使用隔离令牌保护对无主复制数据库的写入。
+
+<img src="../../static/fig/ddia_0907.png" alt="图 9-7. 使用隔离令牌保护对无主复制数据库的写入。" style="display: block; margin: 1rem auto; width: 100%; max-width: 720px;" />
 
 
 在 [图 9-7](#fig_distributed_fencing_leaderless) 中，客户端 2 有隔离令牌 34，因此它所有以 34… 开头的时间戳都大于客户端 1 生成的任何以 33… 开头的时间戳。客户端 2 写入副本的仲裁，但它无法到达副本 3。这意味着当僵尸客户端 1 稍后尝试写入时，它的写入可能在副本 3 上成功，即使它被副本 1 和 2 忽略。这不是问题，因为后续的仲裁读取将更喜欢具有更大时间戳的客户端 2 的写入，读修复或反熵最终将覆盖客户端 1 写入的值。

@@ -124,7 +124,11 @@ breadcrumbs: false
 
 数据仓库包含公司中所有各种 OLTP 系统中数据的只读副本。数据从 OLTP 数据库中提取（使用定期数据转储或连续更新流），转换为分析友好的模式，进行清理，然后加载到数据仓库中。这种将数据导入数据仓库的过程称为 **提取-转换-加载**（ETL），如[图 1-1](#fig_dwh_etl) 所示。有时 **转换** 和 **加载** 步骤的顺序会互换（即，先加载，再在数据仓库中进行转换），从而产生 **ELT**。
 
-{{< figure src="/fig/ddia_0101.png" id="fig_dwh_etl" caption="图 1-1. ETL 到数据仓库的简化概述。" class="w-full my-4" >}}
+<a id="fig_dwh_etl"></a>
+
+图 1-1. ETL 到数据仓库的简化概述。
+
+<img src="../../static/fig/ddia_0101.png" alt="图 1-1. ETL 到数据仓库的简化概述。" style="display: block; margin: 1rem auto; width: 100%; max-width: 720px;" />
 
 在某些情况下，ETL 过程的数据源是外部 SaaS 产品，如客户关系管理（CRM）、电子邮件营销或信用卡处理系统。在这些情况下，你无法直接访问原始数据库，因为它只能通过软件供应商的 API 访问。将这些外部系统的数据导入你自己的数据仓库可以实现通过 SaaS API 无法实现的分析。SaaS API 的 ETL 通常由专门的数据连接器服务（如 Fivetran、Singer 或 AirByte）实现。
 
@@ -192,7 +196,11 @@ Apache Hive、Spark SQL、Presto 和 Trino 是这种方法的例子。
 对于软件，需要做出的两个重要决定是谁构建软件和谁部署它。有一系列可能性，每个决定都在不同程度上外包，如[图 1-2](#fig_cloud_spectrum) 所示。
 一个极端是你自己编写并在内部运行的定制软件；另一个极端是广泛使用的云服务或软件即服务（SaaS）产品，由外部供应商实施和运营，你只能通过 Web 界面或 API 访问。
 
-{{< figure src="/fig/ddia_0102.png" id="fig_cloud_spectrum" caption="图 1-2. 软件类型及其运维的范围。" class="w-full my-4" >}}
+<a id="fig_cloud_spectrum"></a>
+
+图 1-2. 软件类型及其运维的范围。
+
+<img src="../../static/fig/ddia_0102.png" alt="图 1-2. 软件类型及其运维的范围。" style="display: block; margin: 1rem auto; width: 100%; max-width: 720px;" />
 
 中间地带是你 **自托管** 的现成软件（开源或商业），即自己部署——例如，如果你下载 MySQL 并将其安装在你控制的服务器上。
 这可能在你自己的硬件上（通常称为 **本地部署**，即使服务器实际上在租用的数据中心机架中而不是字面上在你自己的场所）
