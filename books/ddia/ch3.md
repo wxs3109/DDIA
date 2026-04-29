@@ -108,8 +108,6 @@ NoSQL 运动的一个持久影响是 **document model** 的流行，它通常将
 
 另一种表示相同信息的方式，可能更自然并且更接近应用程序代码中的对象结构，是作为 JSON 文档，如 [示例 3-1](#fig_obama_json) 所示。
 
-{{< figure id="fig_obama_json" title="示例 3-1. 将 LinkedIn 个人资料表示为 JSON 文档" class="w-full my-4" >}}
-
 ```json
 {
     "user_id": 251,
@@ -191,6 +189,21 @@ db.users.aggregate([
 ])
 ```
 
+> [!NOTE] Wenbo 注
+> 可以把这段看成“两步走”：
+> 
+> 1. `{ $match: { _id: 251 } }`：先从 `users` 集合里找到 `_id = 251` 的用户。
+> 2. `{ $lookup: { ... } }`：再拿这个用户文档里的 `region_id`，去 `regions` 集合里找对应地区。
+> 
+> 其中：
+> 
+> * `from: "regions"` 表示要去查的目标集合是 `regions`。
+> * `localField: "region_id"` 表示当前用户文档里参与匹配的字段是 `region_id`。
+> * `foreignField: "_id"` 表示在 `regions` 集合里，用 `_id` 字段和它对上。
+> * `as: "region"` 表示把查到的结果放到输出文档的 `region` 字段里。
+> 
+> 所以它的效果相当于关系数据库里的 join：先找到用户，再把这个用户所属地区的信息拼回来。
+
 #### normalization 的权衡 {#trade-offs-of-normalization}
 
 在简历示例中，虽然 `region_id` 字段是对标准化区域集的引用，但 `organization`（人工作的公司或政府）和 `school_name`（他们学习的地方）的名称只是字符串。这种表示是反normalization的：许多人可能在同一家公司工作过，但没有 ID 将他们联系起来。
@@ -242,8 +255,6 @@ SELECT posts.id, posts.sender_id
 <img src="../../static/fig/ddia_0303.png" alt="图 3-3. 关系模型中的多对多关系。" style="display: block; margin: 1rem auto; width: 100%; max-width: 720px;" />
 
 多对一和多对多关系不容易适应一个自包含的 JSON 文档；它们更适合normalized representation。在文档模型中，一种可能的表示如 [示例 3-2](#fig_datamodels_m2m_json) 所示，并在 [图 3-4](#fig_datamodels_many_to_many) 中说明：每个虚线矩形内的数据可以分组到一个文档中，但到组织和学校的链接最好表示为对其他文档的引用。
-
-{{< figure id="fig_datamodels_m2m_json" title="示例 3-2. 通过 ID 引用组织的简历。" class="w-full my-4" >}}
 
 ```json
 {
