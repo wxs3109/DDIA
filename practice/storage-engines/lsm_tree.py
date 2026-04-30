@@ -1,11 +1,7 @@
-# LSM-Tree (Log-Structured Merge Tree)
-# Reference: DDIA ch4, sec_storage_lsm
+# LSM-Tree implementation has moved to the lsm/ package.
+# See: practice/storage-engines/lsm/
 #
-# Simplified implementation to understand the core ideas:
-# - writes go to in-memory memtable (sorted)
-# - memtable flushes to disk as immutable SSTable segments
-# - reads check memtable first, then segments from newest to oldest
-# - background compaction merges and garbage-collects segments
-
-class LSMTree:
-    pass  # TODO
+# Run the demo:
+#   cd practice/storage-engines
+#   python -m lsm.demo
+from lsm import LSMTree  # noqa: F401
