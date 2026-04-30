@@ -540,6 +540,32 @@ GROUP BY
 
 为了处理像 [示例 4-1](#fig_storage_analytics_query) 这样的查询，你可能在 `fact_sales.date_key` 和/或 `fact_sales.product_sk` 上有索引，告诉存储引擎在哪里找到特定日期或特定产品的所有销售。但是，面向行的存储引擎仍然需要将所有这些行（每行包含超过 100 个属性）从磁盘加载到内存中，解析它们，并过滤掉不符合所需条件的行。这可能需要很长时间。
 
+> [!NOTE] Wenbo 注
+> 这里容易混淆的是：SQL 里 `SELECT` 只选几列，不等于 storage engine 在磁盘上只读这几列。SQL 的逻辑层和底层存储层不是一回事。
+>
+> 以这个查询为例，最终输出只需要：
+>
+> ```sql
+> SELECT dim_date.weekday, dim_product.category, SUM(fact_sales.quantity)
+> ```
+>
+> 也就是说，结果里只用到了 `weekday`、`category`、`quantity` 这些列。但在 row-oriented database 里，`fact_sales` 表通常是按 row 存的：一行里的 100 多个 columns 会紧挨着放在同一个 row / page layout 里。磁盘和 buffer pool 通常按 page 读取，例如一次读一个 8 KB 或 16 KB page，而这个 page 里面装的是很多完整 rows，不是单独的某一列。
+>
+> 所以执行逻辑大概是：
+>
+> ```text
+> 1. query planner 看到 WHERE / JOIN 条件
+> 2. 如果 date_key 或 product_sk 上有 index，就用 index 找到可能匹配的 row ids / page locations
+> 3. storage engine 根据这些 row ids 去 heap file / clustered index 里读取对应 rows 所在的 pages
+> 4. 这些 pages 里包含完整 rows，也就是很多本次查询不需要的 columns 也一起被读进来了
+> 5. executor 解析 row，检查 WHERE / JOIN 条件，取出真正需要的 columns
+> 6. 对 quantity 做 SUM，再输出 weekday 和 category
+> ```
+>
+> 注意，这不是说数据库一定会把 100 多个 columns 都变成最终结果，也不是说每个 column 都会被完整“使用”。而是说在 row-oriented storage 里，I/O 单位和存储布局是按 row/page 组织的；为了拿到 `quantity`，数据库经常必须先把包含整行的 page 读进来，再从 row 里抽出 `quantity`。不需要的 columns 可能不会参与后续计算，但它们已经跟着整行一起被读到了内存里。
+>
+> 一个例外是 `covering index`：如果 index 本身已经包含查询需要的所有 columns，数据库可以只读 index，不回表读取完整 row。但对于大型分析查询，特别是要扫描大量 rows 并做 aggregation 的场景，row-oriented storage 仍然会浪费很多 I/O 在“不需要的 columns”上。这就是 column-oriented storage 的优势：它可以只读 `date_key`、`product_sk`、`quantity` 这些相关 columns，而不是把整行 100 多列都一起读出来。
+
 *面向列*（或 *列式*）存储背后的想法很简单：不要将一行中的所有值存储在一起，而是将每 *列* 中的所有值存储在一起 [^56]。如果每列单独存储，查询只需要读取和解析该查询中使用的那些列，这可以节省大量工作。[图 4-7](#fig_column_store) 使用 [图 3-5](/ch3#fig_dwh_schema) 中事实表的扩展版本展示了这一原理。
 
 --------
