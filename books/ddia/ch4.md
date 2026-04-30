@@ -645,25 +645,25 @@ GROUP BY
 查询需要检查磁盘上的列数据和内存中的最近写入，并将两者结合起来。查询执行引擎对用户隐藏了这种区别。从分析师的角度来看，已通过插入、更新或删除修改的数据会立即反映在后续查询中。Snowflake、Vertica、Apache Pinot、Apache Druid 和许多其他系统都这样做 [^61] [^63] [^64] [^76]。
 
 
-### 查询执行：编译与向量化 {#sec_storage_vectorized}
+### Query Execution：Query Compilation 与 Vectorized Processing {#sec_storage_vectorized}
 
-用于分析的复杂 SQL 查询被分解为由多个阶段组成的 *查询计划*，称为 *算子*，这些算子可能分布在多台机器上以并行执行。查询规划器可以通过选择使用哪些算子、以何种顺序执行它们以及在哪里运行每个算子来执行大量优化。
+用于分析的复杂 SQL 查询会被分解为由多个阶段组成的 *query plan*，这些阶段称为 *operators*；这些 operators 可能分布在多台机器上并行执行。*query planner* 可以通过选择使用哪些 operators、以何种顺序执行它们，以及在哪里运行每个 operator 来做大量优化。
 
-在每个算子内，查询引擎需要对列中的值执行各种操作，例如查找值在特定值集中的所有行（可能作为连接的一部分），或检查值是否大于 15。它还需要查看同一行的几列，例如查找产品是香蕉且门店是某个特定目标门店的所有销售交易。
+在每个 operator 内，*query engine* 需要对列中的值执行各种操作，例如查找值在特定值集中的所有行（可能作为 join 的一部分），或检查值是否大于 15。它还需要查看同一行的几列，例如查找产品是香蕉且门店是某个特定目标门店的所有销售交易。
 
-对于需要扫描数百万行的数据仓库查询，我们不仅需要担心它们需要从磁盘读取的数据量，还需要担心执行复杂算子所需的 CPU 时间。最简单的算子类型就像编程语言的解释器：在遍历每一行时，它检查表示查询的数据结构，以找出需要对哪些列执行哪些比较或计算。不幸的是，这对许多分析目的来说太慢了。高效查询执行的两种替代方法已经出现 [^77]：
+对于需要扫描数百万行的数据仓库查询，我们不仅需要担心它们需要从磁盘读取的数据量，还需要担心执行复杂 operators 所需的 CPU 时间。最简单的 operator 类型就像编程语言的 interpreter：在遍历每一行时，它检查表示查询的数据结构，以找出需要对哪些列执行哪些比较或计算。不幸的是，这对许多分析目的来说太慢了。高效 query execution 的两种替代方法已经出现 [^77]：
 
-查询编译
-: 查询引擎获取 SQL 查询并生成用于执行它的代码。代码逐行迭代，查看感兴趣列中的值，执行所需的任何比较或计算，如果满足所需条件，则将必要的值复制到输出缓冲区。查询引擎将生成的代码编译为机器代码（通常使用现有编译器，如 LLVM），然后在已加载到内存中的列编码数据上运行它。这种代码生成方法类似于 Java 虚拟机（JVM）和类似运行时中使用的即时（JIT）编译方法。
+Query Compilation
+: query engine 获取 SQL query 并生成用于执行它的代码。代码逐行迭代，查看感兴趣列中的值，执行所需的任何比较或计算，如果满足所需条件，则将必要的值复制到 output buffer。query engine 将生成的代码编译为 machine code（通常使用现有 compiler，如 LLVM），然后在已加载到内存中的 column-encoded data 上运行它。这种 code generation 方法类似于 Java 虚拟机（JVM）和类似 runtime 中使用的 just-in-time（JIT）compilation。
 
-向量化处理
-: 查询被解释，而不是编译，但通过批量处理列中的许多值而不是逐行迭代来提高速度。一组固定的预定义算子内置在数据库中；我们可以向它们传递参数并获得一批结果 [^50] [^75]。
+Vectorized Processing
+: query 被解释，而不是编译，但通过批量处理列中的许多 values，而不是逐行迭代来提高速度。一组固定的预定义 operators 内置在数据库中；我们可以向它们传递参数并获得一批结果 [^50] [^75]。
 
-例如，我们可以将 `product_sk` 列和"香蕉"的 ID 传递给相等算子，并获得一个位图（输入列中每个值一位，如果是香蕉则为 1）；然后我们可以将 `store_sk` 列和感兴趣商店的 ID 传递给相同的相等算子，并获得另一个位图；然后我们可以将两个位图传递给"按位 AND"算子，如 [图 4-9](#fig_bitmap_and) 所示。结果将是一个位图，包含特定商店中所有香蕉销售的 1。
+例如，我们可以将 `product_sk` 列和"香蕉"的 ID 传递给 equality operator，并获得一个 bitmap（输入列中每个 value 一位，如果是香蕉则为 1）；然后我们可以将 `store_sk` 列和感兴趣商店的 ID 传递给相同的 equality operator，并获得另一个 bitmap；然后我们可以将两个 bitmaps 传递给 bitwise AND operator，如 [图 4-9](#fig_bitmap_and) 所示。结果将是一个 bitmap，包含特定商店中所有香蕉销售的 1。
 
 <a id="fig_bitmap_and"></a>
 
-图 4-9. 两个位图之间的按位 AND 适合向量化。
+图 4-9. 两个 bitmaps 之间的 bitwise AND 适合 vectorization。
 
 <img src="../../static/fig/ddia_0409.png" alt="图 4-9. 两个位图之间的按位 AND 适合向量化。" style="display: block; margin: 1rem auto; width: 100%; max-width: 720px;" />
 
@@ -674,125 +674,146 @@ GROUP BY
 * 利用并行性，例如多线程和单指令多数据（SIMD）指令 [^79] [^80]，以及
 * 直接对压缩数据进行操作，而无需将其解码为单独的内存表示，这可以节省内存分配和复制成本。
 
-### 物化视图与数据立方体 {#sec_storage_materialized_views}
+### Materialized Views and Data Cubes {#sec_storage_materialized_views}
 
-我们之前在 ["物化和更新时间线"](/ch2#sec_introduction_materializing) 中遇到了 *物化视图*：在关系数据模型中，它们是表状对象，其内容是某些查询的结果。区别在于物化视图是查询结果的实际副本，写入磁盘，而虚拟视图只是编写查询的快捷方式。当你从虚拟视图读取时，SQL 引擎会即时将其扩展为视图的基础查询，然后处理扩展的查询。
+我们之前在 ["物化和更新时间线"](/ch2#sec_introduction_materializing) 中遇到了 *materialized view*：在 relational data model 中，它们是表状对象，其内容是某些 query 的结果。区别在于 materialized view 是 query result 的实际副本，写入磁盘，而 virtual view 只是编写 query 的快捷方式。当你从 virtual view 读取时，SQL engine 会即时将其扩展为 view 的 underlying query，然后处理扩展后的 query。
 
-当基础数据更改时，物化视图需要相应更新。一些数据库可以自动执行此操作，还有像 Materialize 这样专门从事物化视图维护的系统 [^81]。执行此类更新意味着写入时需要更多工作，但物化视图可以改善在重复需要执行相同查询的工作负载中的读取性能。
+当 underlying data 更改时，materialized view 需要相应更新。一些数据库可以自动执行此操作，还有像 Materialize 这样专门从事 materialized view maintenance 的系统 [^81]。执行此类 updates 意味着写入时需要更多工作，但 materialized view 可以改善在重复需要执行相同 query 的 workload 中的读取性能。
 
-*物化聚合* 是一种可以在数据仓库中有用的物化视图类型。如前所述，数据仓库查询通常涉及聚合函数，例如 SQL 中的 `COUNT`、`SUM`、`AVG`、`MIN` 或 `MAX`。如果许多不同的查询使用相同的聚合，每次都处理原始数据可能会很浪费。为什么不缓存查询最常使用的一些计数或总和？*数据立方体*（*OLAP 立方体*）通过创建按不同维度分组的聚合网格来做到这一点 [^82]。[图 4-10](#fig_data_cube) 显示了一个示例。
+*Materialized aggregate* 是一种可以在 data warehouse 中有用的 materialized view 类型。如前所述，data warehouse queries 通常涉及 aggregate functions，例如 SQL 中的 `COUNT`、`SUM`、`AVG`、`MIN` 或 `MAX`。如果许多不同的 queries 使用相同的 aggregate，每次都处理 raw data 可能会很浪费。为什么不缓存 query 最常使用的一些 counts 或 sums？*Data cube*（*OLAP cube*）通过创建按不同 dimensions 分组的 aggregate grid 来做到这一点 [^82]。[图 4-10](#fig_data_cube) 显示了一个示例。
 
 <a id="fig_data_cube"></a>
 
-图 4-10. 数据立方体的两个维度，通过求和聚合数据。
+图 4-10. Data cube 的两个 dimensions，通过 sum aggregate 数据。
 
 <img src="../../static/fig/ddia_0410.png" alt="图 4-10. 数据立方体的两个维度，通过求和聚合数据。" style="display: block; margin: 1rem auto; width: 100%; max-width: 720px;" />
 
-现在假设每个事实只有两个维度表的外键 —— 在 [图 4-10](#fig_data_cube) 中，这些是 `date_key` 和 `product_sk`。你现在可以绘制一个二维表，日期沿着一个轴，产品沿着另一个轴。每个单元格包含具有该日期-产品组合的所有事实的属性（例如 `net_price`）的聚合（例如 `SUM`）。然后，你可以沿着每行或列应用相同的聚合，并获得已减少一个维度的摘要（不管日期的产品销售，或不管产品的日期销售）。
+现在假设每个 fact 只有两个 dimension tables 的 foreign keys —— 在 [图 4-10](#fig_data_cube) 中，这些是 `date_key` 和 `product_sk`。你现在可以绘制一个 two-dimensional table，date 沿着一个 axis，product 沿着另一个 axis。每个 cell 包含具有该 date-product 组合的所有 facts 的 attribute（例如 `net_price`）的 aggregate（例如 `SUM`）。然后，你可以沿着每行或列应用相同的 aggregate，并获得已减少一个 dimension 的 summary（不管 date 的 product sales，或不管 product 的 date sales）。
 
-一般来说，事实通常有两个以上的维度。在 [图 3-5](/ch3#fig_dwh_schema) 中有五个维度：日期、产品、商店、促销和客户。很难想象五维超立方体会是什么样子，但原理保持不变：每个单元格包含特定日期-产品-商店-促销-客户组合的销售。然后可以沿着每个维度重复汇总这些值。
+一般来说，facts 通常有两个以上的 dimensions。在 [图 3-5](/ch3#fig_dwh_schema) 中有五个 dimensions：date、product、store、promotion 和 customer。很难想象 five-dimensional hypercube 会是什么样子，但原理保持不变：每个 cell 包含特定 date-product-store-promotion-customer 组合的 sales。然后可以沿着每个 dimension 重复汇总这些 values。
 
-物化数据立方体的优点是某些查询会变得非常快，因为结果已经被预先计算好了。例如，如果你想知道昨天每个商店的总销售额，你只需要查看相应维度上的汇总值 —— 不需要扫描数百万行。
+Materialized data cube 的优点是某些 queries 会变得非常快，因为 results 已经被预先计算好了。例如，如果你想知道昨天每个 store 的 total sales，你只需要查看相应 dimension 上的 summary value —— 不需要扫描数百万行。
 
-缺点是数据立方体不像直接查询原始数据那样灵活。例如，没有办法计算售价超过 100 美元的商品销售占比，因为价格并不是其中一个维度。因此，大多数数据仓库都会尽可能保留原始数据，只把这类聚合（如数据立方体）当作特定查询的性能加速手段。
+缺点是 data cube 不像直接查询 raw data 那样灵活。例如，没有办法计算售价超过 100 美元的商品销售占比，因为 price 并不是其中一个 dimension。因此，大多数 data warehouses 都会尽可能保留 raw data，只把这类 aggregates（如 data cube）当作特定 query 的 performance acceleration 手段。
 
 
-## 多维索引与全文索引 {#sec_storage_multidimensional}
+## Multidimensional Indexes and Full-Text Search {#sec_storage_multidimensional}
 
-我们在本章前半部分看到的 B 树和 LSM 树允许对单个属性进行范围查询：例如，如果键是用户名，你可以使用它们作为索引来高效查找所有以 L 开头的名称。但有时，按单个属性搜索是不够的。
+我们在本章前半部分看到的 B-tree 和 LSM tree 允许对单个 attribute 进行 range query：例如，如果 key 是 username，你可以使用它们作为 index 来高效查找所有以 L 开头的 names。但有时，按单个 attribute 搜索是不够的。
 
-最常见的多列索引类型称为 *联合索引*，它通过将一列追加到另一列来将几个字段组合成一个键（索引定义指定字段以何种顺序连接）。这就像老式的纸质电话簿，它提供从（*姓氏*、*名字*）到电话号码的索引。由于排序顺序，索引可用于查找具有特定姓氏的所有人，或具有特定 *姓氏-名字* 组合的所有人。但是，如果你想查找具有特定名字的所有人，索引是无用的。
+最常见的 multicolumn index 类型称为 *concatenated index*，它通过将一列追加到另一列来将几个 fields 组合成一个 key（index definition 指定 fields 以何种顺序连接）。这就像老式的纸质电话簿，它提供从（*last name*、*first name*）到电话号码的 index。由于 sort order，index 可用于查找具有特定 last name 的所有人，或具有特定 *last name-first name* 组合的所有人。但是，如果你想查找具有特定 first name 的所有人，index 是无用的。
 
-另一方面，*多维索引* 允许你一次查询多个列。在地理空间数据中这尤其重要。例如，餐厅搜索网站可能有一个包含每个餐厅的纬度和经度的数据库。当用户在地图上查看餐厅时，网站需要搜索用户当前查看的矩形地图区域内的所有餐厅。这需要像以下这样的二维范围查询：
+另一方面，*multidimensional index* 允许你一次查询多个 columns。在 geospatial data 中这尤其重要。例如，餐厅搜索网站可能有一个包含每个餐厅 latitude 和 longitude 的 database。当用户在 map 上查看餐厅时，网站需要搜索用户当前查看的 rectangular map area 内的所有餐厅。这需要像以下这样的 two-dimensional range query：
 
 ```sql
 SELECT * FROM restaurants WHERE latitude > 51.4946 AND latitude < 51.5079
     AND longitude > -0.1162 AND longitude < -0.1004;
 ```
 
-纬度和经度列上的联合索引无法有效地回答这种查询：它可以为你提供纬度范围内的所有餐厅（但在任何经度），或经度范围内的所有餐厅（但在北极和南极之间的任何地方），但不能同时提供两者。
+latitude 和 longitude columns 上的 concatenated index 无法有效地回答这种 query：它可以为你提供 latitude range 内的所有餐厅（但在任何 longitude），或 longitude range 内的所有餐厅（但在北极和南极之间的任何地方），但不能同时提供两者。
 
-一种选择是使用空间填充曲线将二维位置转换为单个数字，然后使用常规 B 树索引 [^83]。更常见的是，使用专门的空间索引，如 R 树或 Bkd 树 [^84]；它们划分空间，使附近的数据点倾向于分组在同一子树中。例如，PostGIS 使用 PostgreSQL 的通用搜索树索引设施将地理空间索引实现为 R 树 [^85]。也可以使用规则间隔的三角形、正方形或六边形网格 [^86]。
+一种选择是使用 space-filling curve 将 two-dimensional position 转换为单个 number，然后使用常规 B-tree index [^83]。更常见的是，使用专门的 spatial index，如 R-tree 或 BKD-tree [^84]；它们划分 space，使附近的 data points 倾向于分组在同一 subtree 中。例如，PostGIS 使用 PostgreSQL 的 Generalized Search Tree (GiST) index facility 将 geospatial index 实现为 R-tree [^85]。也可以使用规则间隔的 triangular、square 或 hexagonal grid [^86]。
 
-多维索引不仅用于地理位置。例如，在电子商务网站上，你可以在维度（*红色*、*绿色*、*蓝色*）上使用三维索引来搜索某个颜色范围内的产品，或者在天气观测数据库中，你可以在（*日期*、*温度*）上有一个二维索引，以便有效地搜索 2013 年期间温度在 25 到 30°C 之间的所有观测。使用一维索引，你必须扫描 2013 年的所有记录（不管温度），然后按温度过滤它们，反之亦然。二维索引可以同时按时间戳和温度缩小范围 [^87]。
+Multidimensional index 不仅用于 geolocation。例如，在 e-commerce 网站上，你可以在 dimensions（*red*、*green*、*blue*）上使用 three-dimensional index 来搜索某个 color range 内的 products，或者在 weather observation database 中，你可以在（*date*、*temperature*）上有一个 two-dimensional index，以便有效地搜索 2013 年期间 temperature 在 25 到 30°C 之间的所有 observations。使用 one-dimensional index，你必须扫描 2013 年的所有 records（不管 temperature），然后按 temperature 过滤它们，反之亦然。Two-dimensional index 可以同时按 timestamp 和 temperature 缩小 range [^87]。
 
-### 全文检索 {#sec_storage_full_text}
+### Full-Text Search {#sec_storage_full_text}
 
-全文检索允许你通过可能出现在文本中任何位置的关键字搜索文本文档集合（网页、产品描述等）[^88]。信息检索是一个大的专业主题，通常涉及特定于语言的处理：例如，几种亚洲语言在单词之间没有空格或标点符号，因此将文本分割成单词需要一个指示哪些字符序列构成单词的模型。全文检索还经常涉及匹配相似但不相同的单词（例如拼写错误或单词的不同语法形式）和同义词。这些问题超出了本书的范围。
+Full-text search 允许你通过可能出现在 text 中任何位置的 keywords 搜索 text documents 集合（网页、产品描述等）[^88]。Information retrieval 是一个大的专业主题，通常涉及 language-specific processing：例如，几种亚洲语言在 words 之间没有空格或标点符号，因此将 text 分割成 words 需要一个指示哪些 character sequences 构成 word 的 model。Full-text search 还经常涉及匹配相似但不相同的 words（例如 spelling mistakes 或 word 的不同 grammatical forms）和 synonyms。这些问题超出了本书的范围。
 
-然而，在其核心，你可以将全文检索视为另一种多维查询：在这种情况下，可能出现在文本中的每个单词（*词项*）是一个维度。包含词项 *x* 的文档在维度 *x* 中的值为 1，不包含 *x* 的文档的值为 0。搜索提到“红苹果”的文档意味着查询在 *红* 维度中查找 1，同时在 *苹果* 维度中查找 1。维度数量可能因此非常大。
+然而，在其核心，你可以将 full-text search 视为另一种 multidimensional query：在这种情况下，可能出现在 text 中的每个 word（*term*）是一个 dimension。包含 term *x* 的 document 在 dimension *x* 中的 value 为 1，不包含 *x* 的 document 的 value 为 0。搜索提到“红苹果”的 document 意味着 query 在 *红* dimension 中查找 1，同时在 *苹果* dimension 中查找 1。dimensions 数量可能因此非常大。
 
-许多搜索引擎用来回答此类查询的数据结构称为 *倒排索引*。这是一个键值结构，其中键是词项，值是包含该词项的所有文档的 ID 列表（*倒排列表*）。如果文档 ID 是顺序数字，倒排列表也可以表示为稀疏位图，如 [图 4-8](#fig_bitmap_index)：词项 *x* 的位图中的第 *n* 位是 1，如果 ID 为 *n* 的文档包含词项 *x* [^89]。
+许多 search engines 用来回答此类 queries 的 data structure 称为 *inverted index*。这是一个 key-value structure，其中 key 是 term，value 是包含该 term 的所有 documents 的 ID list（*posting list*）。如果 document ID 是顺序数字，posting list 也可以表示为 sparse bitmap，如 [图 4-8](#fig_bitmap_index)：term *x* 的 bitmap 中的第 *n* 位是 1，如果 ID 为 *n* 的 document 包含 term *x* [^89]。
 
-查找包含词项 *x* 和 *y* 的所有文档现在类似于搜索匹配两个条件的行的向量化数据仓库查询（[图 4-9](#fig_bitmap_and)）：加载词项 *x* 和 *y* 的两个位图并计算它们的按位 AND。即使位图是游程编码的，这也可以非常高效地完成。
+查找包含 terms *x* 和 *y* 的所有 documents 现在类似于搜索匹配两个 conditions 的 rows 的 vectorized data warehouse query（[图 4-9](#fig_bitmap_and)）：加载 terms *x* 和 *y* 的两个 bitmaps 并计算它们的 bitwise AND。即使 bitmap 是 run-length encoded 的，这也可以非常高效地完成。
 
-例如，Elasticsearch 和 Solr 使用的全文索引引擎 Lucene 就是这样工作的 [^90]。它将词项到倒排列表的映射存储在类似 SSTable 的排序文件中，这些文件使用我们在本章前面看到的相同日志结构方法在后台合并 [^91]。PostgreSQL 的 GIN 索引类型也使用倒排列表来支持全文检索和 JSON 文档内的索引 [^92] [^93]。
+例如，Elasticsearch 和 Solr 使用的 full-text index engine Lucene 就是这样工作的 [^90]。它将 term 到 posting list 的 mapping 存储在类似 SSTable 的 sorted files 中，这些 files 使用我们在本章前面看到的相同 log-structured 方法在后台 merge [^91]。PostgreSQL 的 GIN index type 也使用 posting list 来支持 full-text search 和 JSON document 内的 indexing [^92] [^93]。
 
-除了将文本分解为单词，另一种选择是查找长度为 *n* 的所有子字符串，称为 *n-gram*（*n 元语法*）。例如，字符串 `"hello"` 的三元语法（*n* = 3）是 `"hel"`、`"ell"` 和 `"llo"`。如果我们为所有三元语法构建倒排索引，我们就可以搜索任意至少三个字符长的子字符串。三元语法索引甚至允许在搜索查询中使用正则表达式；缺点是它们相当大 [^94]。
+除了将 text 分解为 words，另一种选择是查找长度为 *n* 的所有 substrings，称为 *n-gram*。例如，string `"hello"` 的 trigram（*n* = 3）是 `"hel"`、`"ell"` 和 `"llo"`。如果我们为所有 trigrams 构建 inverted index，我们就可以搜索任意至少三个 characters 长的 substring。Trigram index 甚至允许在 search query 中使用 regular expression；缺点是它们相当大 [^94]。
 
-为了处理文档或查询中的拼写错误，Lucene 能够在一定编辑距离内搜索文本中的单词（编辑距离为 1 意味着已添加、删除或替换了一个字母）[^95]。它通过将词项集存储为字符上的有限状态自动机（类似于 *字典树* [^96]）并将其转换为 *莱文斯坦自动机* 来实现，该自动机支持在给定编辑距离内高效搜索单词 [^97]。
+为了处理 document 或 query 中的 spelling mistakes，Lucene 能够在一定 edit distance 内搜索 text 中的 words（edit distance 为 1 意味着已添加、删除或替换了一个字母）[^95]。它通过将 term set 存储为 characters 上的 finite-state automaton（类似于 *trie* [^96]）并将其转换为 *Levenshtein automaton* 来实现，该 automaton 支持在给定 edit distance 内高效搜索 words [^97]。
 
 
-### 向量嵌入 {#id92}
+### Vector Embeddings {#id92}
 
-语义搜索超越了同义词和拼写错误，试图理解文档概念和用户意图。例如，如果你的帮助页面中有一个标题为“取消订阅”的页面，用户在搜索“如何关闭我的账户”或“终止合同”时，仍应能找到这个页面，即使查询词完全不同，但语义非常接近。
+Semantic search 超越了 synonyms 和 spelling mistakes，试图理解 document concepts 和 user intent。例如，如果你的帮助页面中有一个标题为“取消订阅”的页面，用户在搜索“如何关闭我的账户”或“终止合同”时，仍应能找到这个页面，即使 query terms 完全不同，但 semantic meaning 非常接近。
 
-为了理解文档的语义 —— 它的含义 —— 语义搜索索引使用嵌入模型将文档转换为浮点值向量，称为 *向量嵌入*。向量表示多维空间中的一个点，每个浮点值表示文档沿着一个维度轴的位置。嵌入模型生成的向量嵌入在（这个多维空间中）彼此接近，当嵌入的输入文档在语义上相似时。
+为了理解 document 的 semantics —— 它的含义 —— semantic search index 使用 embedding model 将 document 转换为 floating-point value vector，称为 *vector embedding*。Vector 表示 multidimensional space 中的一个 point，每个 floating-point value 表示 document 沿着一个 dimension axis 的位置。embedding model 生成的 vector embeddings 在（这个 multidimensional space 中）彼此接近，当 embedding 的 input documents 在 semantics 上相似时。
 
 --------
 
 > [!NOTE]
-> 我们在 ["查询执行：编译与向量化"](#sec_storage_vectorized) 中看到了术语 *向量化处理*。语义搜索中的向量有不同的含义。在向量化处理中，向量指的是可以用特别优化的代码处理的一批位。在嵌入模型中，向量是表示多维空间中位置的浮点数列表。
+> 我们在 ["Query Execution：Query Compilation 与 Vectorized Processing"](#sec_storage_vectorized) 中看到了术语 *vectorized processing*。Semantic search 中的 vector 有不同的含义。在 vectorized processing 中，vector 指的是可以用特别优化的代码处理的一批 bits。在 embedding model 中，vector 是表示 multidimensional space 中位置的 floating-point number list。
 
 --------
 
-例如，关于农业的维基百科页面的三维向量嵌入可能是 `[0.1, 0.22, 0.11]`。关于蔬菜的维基百科页面会非常接近，可能嵌入为 `[0.13, 0.19, 0.24]`。关于星型模式的页面可能有 `[0.82, 0.39, -0.74]` 的嵌入，相对较远。我们可以通过观察看出前两个向量比第三个更接近。
+例如，关于农业的 Wikipedia page 的 three-dimensional vector embedding 可能是 `[0.1, 0.22, 0.11]`。关于蔬菜的 Wikipedia page 会非常接近，可能 embedding 为 `[0.13, 0.19, 0.24]`。关于 star schema 的 page 可能有 `[0.82, 0.39, -0.74]` 的 embedding，相对较远。我们可以通过观察看出前两个 vectors 比第三个更接近。
 
-嵌入模型使用更大的向量（通常超过 1,000 个数字），但原理是相同的。我们不试图理解各个数字的含义；它们只是嵌入模型指向抽象多维空间中位置的一种方式。搜索引擎使用距离函数（如余弦相似度或欧几里得距离）来测量向量之间的距离。余弦相似度测量两个向量角度的余弦以确定它们的接近程度，而欧几里得距离测量空间中两点之间的直线距离。
+Embedding model 使用更大的 vectors（通常超过 1,000 个 numbers），但原理是相同的。我们不试图理解各个 numbers 的含义；它们只是 embedding model 指向 abstract multidimensional space 中位置的一种方式。Search engine 使用 distance function（如 cosine similarity 或 Euclidean distance）来测量 vectors 之间的 distance。Cosine similarity 测量两个 vectors 角度的 cosine 以确定它们的接近程度，而 Euclidean distance 测量 space 中两点之间的 straight-line distance。
 
-许多早期的嵌入模型，如 Word2Vec [^98]、BERT [^99] 和 GPT [^100] 都处理文本数据。这些模型通常实现为神经网络。研究人员继续为视频、音频和图像创建嵌入模型。最近，模型架构已经变成 *多模态* 的：单个模型可以为多种模态（如文本和图像）生成向量嵌入。
+许多早期的 embedding models，如 Word2Vec [^98]、BERT [^99] 和 GPT [^100] 都处理 text data。这些 models 通常实现为 neural network。研究人员继续为 video、audio 和 image 创建 embedding models。最近，model architecture 已经变成 *multimodal* 的：单个 model 可以为多种 modalities（如 text 和 image）生成 vector embeddings。
 
-语义搜索引擎在用户输入查询时使用嵌入模型生成向量嵌入。用户的查询和相关上下文（例如用户的位置）被输入到嵌入模型中。嵌入模型生成查询的向量嵌入后，搜索引擎必须使用向量索引找到具有相似向量嵌入的文档。
+Semantic search engine 在用户输入 query 时使用 embedding model 生成 vector embedding。用户的 query 和相关 context（例如用户的位置）被输入到 embedding model 中。embedding model 生成 query 的 vector embedding 后，search engine 必须使用 vector index 找到具有相似 vector embeddings 的 documents。
 
-向量索引存储文档集合的向量嵌入。要查询索引，你传入查询的向量嵌入，索引返回其向量最接近查询向量的文档。由于我们之前看到的 R 树不适用于多维向量，因此使用专门的向量索引，例如：
+Vector index 存储 document collection 的 vector embeddings。要查询 index，你传入 query 的 vector embedding，index 返回其 vector 最接近 query vector 的 document。由于我们之前看到的 R-tree 不适用于 multidimensional vectors，因此使用专门的 vector indexes，例如：
 
-平面索引（Flat indexes）
-: 向量按原样存储在索引中。查询必须读取每个向量并测量其与查询向量的距离。平面索引是准确的，但测量查询与每个向量之间的距离很慢。
+> [!NOTE] Wenbo 注
+> 这里讲的 `vector index` / `vector database`，就是 LLM 应用里常说的向量数据库的核心机制。典型流程是：先用 `embedding model` 把 document 或 document chunk 转成 `vector embedding`，存进 vector database；用户提问时，也把 query 转成 query vector；然后 vector index 找出与 query vector 最接近的 documents/chunks，交给 LLM 作为上下文。这就是很多 RAG 系统的检索部分。
+>
+> 可以粗略理解成：
+>
+> ```text
+> document / chunk
+> -> embedding model
+> -> vector embedding
+> -> vector database / vector index
+>
+> user query
+> -> embedding model
+> -> query vector
+> -> nearest-neighbor search
+> -> relevant documents/chunks
+> -> LLM
+> ```
+>
+> `vector index` 更偏底层数据结构，负责 nearest-neighbor search，例如 `IVF`、`HNSW`。`vector database` 则是完整系统，除了 vector index，通常还包括 storage、metadata filter、update/delete、persistence、replication、API 等能力。所以 LLM 里的 vector database 不是一种全新的数据库概念，而是把 `vector embedding + vector index` 这套机制用于 semantic search 和 RAG 场景。
 
-倒排文件（IVF）索引
-: 向量空间被聚类为向量的分区（称为 *质心*），以减少必须比较的向量数量。IVF 索引比平面索引更快，但只能给出近似结果：即使查询和文档彼此接近，它们也可能落入不同的分区。对 IVF 索引的查询首先定义 *探针*，这只是要检查的分区数。使用更多探针的查询将更准确，但会更慢，因为必须比较更多向量。
+Flat indexes
+: Vectors 按原样存储在 index 中。Query 必须读取每个 vector 并测量其与 query vector 的 distance。Flat index 是准确的，但测量 query 与每个 vector 之间的 distance 很慢。
 
-分层可导航小世界（HNSW）
-: HNSW 索引维护向量空间的多个层，如 [图 4-11](#fig_vector_hnsw) 所示。每一层都表示为一个图，其中节点表示向量，边表示与附近向量的接近度。查询首先在最顶层定位最近的向量，该层具有少量节点。然后查询移动到下面一层的同一节点，并跟随该层中的边，该层连接更密集，寻找更接近查询向量的向量。该过程继续直到到达最后一层。与 IVF 索引一样，HNSW 索引是近似的。
+Inverted file (IVF) indexes
+: Vector space 被 cluster 为 vectors 的 partitions（称为 *centroids*），以减少必须比较的 vectors 数量。IVF index 比 flat index 更快，但只能给出 approximate results：即使 query 和 document 彼此接近，它们也可能落入不同的 partition。对 IVF index 的 query 首先定义 *probe*，这只是要检查的 partition 数。使用更多 probes 的 query 将更准确，但会更慢，因为必须比较更多 vectors。
+
+Hierarchical Navigable Small World (HNSW)
+: HNSW index 维护 vector space 的多个 layers，如 [图 4-11](#fig_vector_hnsw) 所示。每一层都表示为一个 graph，其中 nodes 表示 vectors，edges 表示与 nearby vectors 的接近度。Query 首先在最顶层定位最近的 vector，该层具有少量 nodes。然后 query 移动到下面一层的同一 node，并跟随该层中的 edges，该层连接更密集，寻找更接近 query vector 的 vector。该过程继续直到到达最后一层。与 IVF index 一样，HNSW index 是 approximate 的。
 
 <a id="fig_vector_hnsw"></a>
 
-图 4-11. 在 HNSW 索引中搜索最接近给定查询向量的数据库条目。
+图 4-11. 在 HNSW index 中搜索最接近给定 query vector 的 database entry。
 
-<img src="../../static/fig/ddia_0411.png" alt="图 4-11. 在 HNSW 索引中搜索最接近给定查询向量的数据库条目。" style="display: block; margin: 1rem auto; width: 100%; max-width: 720px;" />
+<img src="../../static/fig/ddia_0411.png" alt="图 4-11. 在 HNSW index 中搜索最接近给定 query vector 的 database entry。" style="display: block; margin: 1rem auto; width: 100%; max-width: 720px;" />
 
 
-许多流行的向量数据库实现了 IVF 和 HNSW 索引。Facebook 的 Faiss 库有每种的许多变体 [^101]，PostgreSQL 的 pgvector 也支持两者 [^102]。IVF 和 HNSW 算法的完整细节超出了本书的范围，但它们的论文是极好的资源 [^103] [^104]。
+许多流行的 vector databases 实现了 IVF 和 HNSW indexes。Facebook 的 Faiss library 有每种的许多 variants [^101]，PostgreSQL 的 pgvector 也支持两者 [^102]。IVF 和 HNSW algorithms 的完整细节超出了本书的范围，但它们的 papers 是极好的资源 [^103] [^104]。
 
-## 总结 {#summary}
+## Summary {#summary}
 
-在本章中，我们试图深入了解数据库如何执行存储和检索。当你在数据库中存储数据时会发生什么，当你稍后再次查询数据时数据库会做什么？
+在本章中，我们试图深入了解 database 如何执行 storage 和 retrieval。当你在 database 中存储 data 时会发生什么，当你稍后再次 query data 时 database 会做什么？
 
-["分析型与事务型系统"](/ch1#sec_introduction_analytics) 介绍了事务处理（OLTP）和分析（OLAP）之间的区别。在本章中，我们看到为 OLTP 优化的存储引擎与为分析优化的存储引擎看起来非常不同：
+["分析型与事务型系统"](/ch1#sec_introduction_analytics) 介绍了 transaction processing（OLTP）和 analytics（OLAP）之间的区别。在本章中，我们看到为 OLTP 优化的 storage engine 与为 analytics 优化的 storage engine 看起来非常不同：
 
-* OLTP 系统针对大量请求进行了优化，每个请求读取和写入少量记录，并且需要快速响应。记录通常通过主键或二级索引访问，这些索引通常是从键到记录的有序映射，也支持范围查询。
-* 数据仓库和类似的分析系统针对扫描大量记录的复杂读取查询进行了优化。它们通常使用带有压缩的列式存储布局，以最小化此类查询需要从磁盘读取的数据量，并使用查询的即时编译或向量化来最小化处理数据所花费的 CPU 时间。
+* OLTP system 针对大量 requests 进行了优化，每个 request 读取和写入少量 records，并且需要快速响应。Records 通常通过 primary key 或 secondary index 访问，这些 indexes 通常是从 key 到 record 的 ordered mapping，也支持 range query。
+* Data warehouse 和类似的 analytics system 针对扫描大量 records 的复杂 read queries 进行了优化。它们通常使用带有 compression 的 column-oriented storage layout，以最小化此类 queries 需要从 disk 读取的数据量，并使用 query compilation 或 vectorization 来最小化处理 data 所花费的 CPU 时间。
 
-在 OLTP 方面，我们看到了两个主要思想流派的存储引擎：
+在 OLTP 方面，我们看到了两个主要思想流派的 storage engines：
 
-* 日志结构方法，只允许追加到文件和删除过时文件，但从不更新已写入的文件。SSTable、LSM 树、RocksDB、Cassandra、HBase、Scylla、Lucene 等属于这一组。一般来说，日志结构存储引擎往往提供高写入吞吐量。
-* 就地更新方法，将磁盘视为一组可以覆盖的固定大小页。B 树是这种理念的最大例子，用于所有主要的关系型 OLTP 数据库以及许多非关系型数据库。作为经验法则，B 树往往更适合读取，提供比日志结构存储更高的读取吞吐量和更低的响应时间。
+* Log-structured 方法，只允许 append 到 file 和删除过时 files，但从不更新已写入的 files。SSTable、LSM tree、RocksDB、Cassandra、HBase、Scylla、Lucene 等属于这一组。一般来说，log-structured storage engine 往往提供高 write throughput。
+* In-place update 方法，将 disk 视为一组可以覆盖的 fixed-size pages。B-tree 是这种理念的最大例子，用于所有主要的 relational OLTP databases 以及许多 non-relational databases。作为经验法则，B-tree 往往更适合读取，提供比 log-structured storage 更高的 read throughput 和更低的 response time。
 
-然后我们查看了可以同时搜索多个条件的索引：多维索引（如 R 树）可以同时按纬度和经度搜索地图上的点，全文检索索引可以搜索出现在同一文本中的多个关键字。最后，向量数据库用于文本文档和其他媒体的语义搜索；它们使用具有大量维度的向量，并通过比较向量相似性来查找相似文档。
+然后我们查看了可以同时搜索多个 conditions 的 indexes：multidimensional index（如 R-tree）可以同时按 latitude 和 longitude 搜索 map 上的 points，full-text search index 可以搜索出现在同一 text 中的多个 keywords。最后，vector database 用于 text documents 和其他 media 的 semantic search；它们使用具有大量 dimensions 的 vectors，并通过比较 vector similarity 来查找 similar documents。
 
-作为应用开发者，如果你掌握了这些关于存储引擎内部机制的知识，就能更好地判断哪种工具最适合你的具体应用。如果你需要调整数据库的调优参数，这种理解也能帮助你预判参数调高或调低可能带来的影响。
+作为 application developer，如果你掌握了这些关于 storage engine internals 的知识，就能更好地判断哪种 tool 最适合你的具体 application。如果你需要调整 database 的 tuning parameters，这种理解也能帮助你预判参数调高或调低可能带来的影响。
 
-尽管本章不能让你成为调优某个特定存储引擎的专家，但它希望已经为你提供了足够的术语和思路，使你能够读懂所选数据库的文档。
+尽管本章不能让你成为 tuning 某个特定 storage engine 的专家，但它希望已经为你提供了足够的 terminology 和思路，使你能够读懂所选 database 的 documentation。
 
 
 
