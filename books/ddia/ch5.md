@@ -436,43 +436,162 @@ record Person {
 
 那么，Avro 如何支持模式演化？
 
-#### 写入者模式与读取者模式 {#the-writers-schema-and-the-readers-schema}
+#### writer schema 与 reader schema {#the-writers-schema-and-the-readers-schema}
 
-当应用程序想要编码一些数据（将其写入文件或数据库，通过网络发送等）时，它使用它知道的任何版本的模式对数据进行编码——例如，该模式可能被编译到应用程序中。这被称为 *写入者模式*。
+当应用程序想要编码一些数据（将其写入文件或数据库，通过网络发送等）时，它使用它知道的某个版本的 schema 对数据进行编码——例如，该 schema 可能被编译到应用程序中。这被称为 *writer schema*。
 
-当应用程序想要解码一些数据（从文件或数据库读取，从网络接收等）时，它使用两个模式：与用于编码相同的写入者模式，以及 *读取者模式*，后者可能不同。这在 [图 5-5](#fig_encoding_avro_schemas) 中说明。读取者模式定义了应用程序代码期望的每条记录的字段及其类型。
+当应用程序想要解码一些数据（从文件或数据库读取，从网络接收等）时，它使用两个 schema：与编码时相同的 *writer schema*，以及 *reader schema*，后者可能不同。这在 [图 5-5](#fig_encoding_avro_schemas) 中说明。*reader schema* 定义了应用程序代码期望的每条记录的字段及其类型。
 
 <a id="fig_encoding_avro_schemas"></a>
 
-图 5-5. 在 Protocol Buffers 中，编码和解码可以使用不同版本的模式。在 Avro 中，解码使用两个模式：写入者模式必须与用于编码的模式相同，但读取者模式可以是较旧或较新的版本。
+图 5-5. 在 Protocol Buffers 中，编码和解码可以使用不同版本的 schema。在 Avro 中，解码使用两个 schema：*writer schema* 必须与编码时使用的 schema 相同，但 *reader schema* 可以是较旧或较新的版本。
 
-<img src="../../static/fig/ddia_0505.png" alt="图 5-5. 在 Protocol Buffers 中，编码和解码可以使用不同版本的模式。在 Avro 中，解码使用两个模式：写入者模式必须与用于编码的模式相同，但读取者模式可以是较旧或较新的版本。" style="display: block; margin: 1rem auto; width: 100%; max-width: 720px;" />
+<img src="../../static/fig/ddia_0505.png" alt="图 5-5. 在 Protocol Buffers 中，编码和解码可以使用不同版本的 schema。在 Avro 中，解码使用两个 schema：writer schema 必须与编码时使用的 schema 相同，但 reader schema 可以是较旧或较新的版本。" style="display: block; margin: 1rem auto; width: 100%; max-width: 720px;" />
 
-如果读取者模式和写入者模式相同，解码很容易。如果它们不同，Avro 通过并排查看写入者模式和读取者模式并将数据从写入者模式转换为读取者模式来解决差异。Avro 规范 [^16] [^17] 准确定义了此解析的工作方式，并在 [图 5-6](#fig_encoding_avro_resolution) 中进行了说明。
+如果 *reader schema* 和 *writer schema* 相同，解码很容易。如果它们不同，Avro 会并排查看 *writer schema* 和 *reader schema*，并将数据从 *writer schema* 解析为 *reader schema*。Avro 规范 [^16] [^17] 准确定义了此解析的工作方式，并在 [图 5-6](#fig_encoding_avro_resolution) 中进行了说明。
 
-例如，如果写入者模式和读取者模式的字段顺序不同，这没有问题，因为模式解析通过字段名匹配字段。如果读取数据的代码遇到出现在写入者模式中但不在读取者模式中的字段，它将被忽略。如果读取数据的代码期望某个字段，但写入者模式不包含该名称的字段，则使用读取者模式中声明的默认值填充它。
+例如，如果 *writer schema* 和 *reader schema* 的字段顺序不同，这没有问题，因为 schema 解析是按字段名匹配的。如果读取数据的代码遇到出现在 *writer schema* 中但不在 *reader schema* 中的字段，它会忽略该字段。如果读取数据的代码期望某个字段，但 *writer schema* 不包含该名称的字段，则使用 *reader schema* 中声明的默认值填充它。
 
 <a id="fig_encoding_avro_resolution"></a>
 
-图 5-6. Avro 读取器解决写入者模式和读取者模式之间的差异。
+图 5-6. Avro 读取器解决 writer schema 和 reader schema 之间的差异。
 
-<img src="../../static/fig/ddia_0506.png" alt="图 5-6. Avro 读取器解决写入者模式和读取者模式之间的差异。" style="display: block; margin: 1rem auto; width: 100%; max-width: 720px;" />
+<img src="../../static/fig/ddia_0506.png" alt="图 5-6. Avro 读取器解决 writer schema 和 reader schema 之间的差异。" style="display: block; margin: 1rem auto; width: 100%; max-width: 720px;" />
+
+> [!NOTE] Wenbo 注
+> 这张原图本身表达了四件事，不只是“同名字段能对上”。可以按箭头逐个看：
+>
+> 1. `favoriteNumber -> favoriteNumber`：同名字段直接匹配，但类型从 `union {null, long}` 变成了 `union {null, int}`。这表示 Avro 在这里还要做**类型解析/转换**；如果旧值能放进 `int` 就能读，放不进去就会有兼容性风险。
+> 2. `userName -> userName`：字段顺序变了也没关系，因为 Avro 是**按字段名匹配**，不是按位置匹配。
+> 3. `interests -> interests`：同名同类型，直接保留。
+> 4. 左边的 `photoURL` 没有箭头连到右边任何字段：说明它只存在于 *writer schema* 中，*reader schema* 不再需要它，所以读取时会**忽略**这个字段。
+>
+> 另外，右边最上面的 `userID` 也没有任何箭头从左边连过来：说明它只存在于 *reader schema* 中，而旧数据里根本没有写过这个字段。此时只有两种可能：
+>
+> 1. 如果 `reader schema` 给 `userID` 提供了默认值，那么读取时用默认值补上。
+> 2. 如果没有默认值，那么这次 schema 解析就不能成功。
+>
+> 所以图 5.6 的重点其实是把 schema resolution 的几种情况放在一张图里同时展示：**同名字段匹配、字段顺序无关、旧字段可忽略、新字段要靠默认值、以及某些类型变化需要满足可转换条件。**
+>
+> 也就是说，这张图不是在说“左右两边字段必须一模一样”，而是在说：**读取器会拿着 writer schema 和 reader schema 做字段级别的对照，然后决定哪些值保留、哪些值丢弃、哪些值补默认、哪些值需要类型转换。**
 
 #### 模式演化规则 {#schema-evolution-rules}
 
-使用 Avro，向前兼容性意味着你可以将新版本的模式作为写入者，将旧版本的模式作为读取者。相反，向后兼容性意味着你可以将新版本的模式作为读取者，将旧版本作为写入者。
+使用 Avro，向前兼容性意味着你可以让新版本的 schema 充当 *writer schema*，让旧版本的 schema 充当 *reader schema*。相反，向后兼容性意味着你可以让新版本的 schema 充当 *reader schema*，让旧版本充当 *writer schema*。
 
-为了保持兼容性，你只能添加或删除具有默认值的字段。（我们的 Avro 模式中的 `favoriteNumber` 字段的默认值为 `null`。）例如，假设你添加了一个具有默认值的字段，因此这个新字段存在于新模式中但不在旧模式中。当使用新模式的读取者读取使用旧模式编写的记录时，将为缺失的字段填充默认值。
+> [!NOTE] Wenbo 注
+> 这里容易绕，是因为“向前/向后兼容”说的是**代码版本之间能不能互相读对方写出的数据**，而 `writer schema` / `reader schema` 说的是**这次读数据时，谁负责写、谁负责读**。把两件事叠在一起就容易晕。
+>
+> 可以直接按“谁写、谁读”来记：
+>
+> - **向后兼容（backward compatibility）**：**新代码读旧数据**。也就是旧版本先把数据写出来，所以旧版本是 *writer schema*；后来升级后的新版本来读，所以新版本是 *reader schema*。
+> - **向前兼容（forward compatibility）**：**旧代码读新数据**。也就是新版本先把数据写出来，所以新版本是 *writer schema*；还没升级的旧版本来读，所以旧版本是 *reader schema*。
+>
+> 用一个最小例子看就清楚了。假设旧 schema 是：
+>
+> ```avro
+> {
+>   "type": "record",
+>   "name": "Person",
+>   "fields": [
+>     {"name": "userName", "type": "string"}
+>   ]
+> }
+> ```
+>
+> 新 schema 在后面加了一个带默认值的字段：
+>
+> ```avro
+> {
+>   "type": "record",
+>   "name": "Person",
+>   "fields": [
+>     {"name": "userName", "type": "string"},
+>     {"name": "interests", "type": {"type": "array", "items": "string"}, "default": []}
+>   ]
+> }
+> ```
+>
+> 现在分两种读法：
+>
+> 1. **新代码读旧数据**：旧数据里只有 `userName`，没有 `interests`。这时新版本是 *reader schema*，它看到旧数据缺了 `interests`，就用默认值 `[]` 补上。所以这是**向后兼容**。
+> 2. **旧代码读新数据**：新数据里有 `userName` 和 `interests`。这时旧版本是 *reader schema*，它不认识 `interests`，就把这个字段忽略掉，只读自己认识的 `userName`。所以这是**向前兼容**。
+>
+> 所以这一段的核心其实只有一句话：**backward = 新读旧，forward = 旧读新；再把“谁写的数据”对应成 writer schema，把“谁来读数据”对应成 reader schema，就不会乱。**
 
-如果你要添加一个没有默认值的字段，新读取者将无法读取旧写入者写入的数据，因此你会破坏向后兼容性。如果你要删除一个没有默认值的字段，旧读取者将无法读取新写入者写入的数据，因此你会破坏向前兼容性。
+为了保持兼容性，你只能添加或删除具有默认值的字段。（我们的 Avro schema 中的 `favoriteNumber` 字段默认值为 `null`。）例如，假设你添加了一个具有默认值的字段，因此这个新字段存在于新 schema 中但不在旧 schema 中。当新版本作为 *reader schema* 去读取按旧 schema 写出的记录时，缺失字段会用默认值填充。
+
+如果你要添加一个没有默认值的字段，新的 *reader schema* 将无法读取旧的 *writer schema* 写出的数据，因此你会破坏向后兼容性。如果你要删除一个没有默认值的字段，旧的 *reader schema* 将无法读取新的 *writer schema* 写出的数据，因此你会破坏向前兼容性。
+
+> [!NOTE] Wenbo 注
+> 这句其实是在说两个对称的失败场景：
+>
+> 1. **新增字段但没有默认值**，会破坏**向后兼容**。
+> 2. **删除字段而旧版本又离不开它**，会破坏**向前兼容**。
+>
+> 先看第一种。假设旧 schema 是：
+>
+> ```avro
+> {
+>   "type": "record",
+>   "name": "Person",
+>   "fields": [
+>     {"name": "userName", "type": "string"}
+>   ]
+> }
+> ```
+>
+> 你把它改成新 schema：
+>
+> ```avro
+> {
+>   "type": "record",
+>   "name": "Person",
+>   "fields": [
+>     {"name": "userName", "type": "string"},
+>     {"name": "email", "type": "string"}
+>   ]
+> }
+> ```
+>
+> 现在新代码去读旧数据时，旧数据里根本没有 `email`。如果新 schema 没给 `email` 默认值，Avro 就不知道该补什么值，因此**新 reader 读不动旧 writer 写出的数据**，这就是破坏向后兼容。
+>
+> 再看第二种。假设旧 schema 原本是：
+>
+> ```avro
+> {
+>   "type": "record",
+>   "name": "Person",
+>   "fields": [
+>     {"name": "userName", "type": "string"},
+>     {"name": "email", "type": "string"}
+>   ]
+> }
+> ```
+>
+> 新 schema 把 `email` 删掉了：
+>
+> ```avro
+> {
+>   "type": "record",
+>   "name": "Person",
+>   "fields": [
+>     {"name": "userName", "type": "string"}
+>   ]
+> }
+> ```
+>
+> 这时如果旧代码去读新数据，旧代码还期待 `email` 存在；但新数据已经不写这个字段了。如果旧 reader 侧没有办法给它补默认值，那么**旧 reader 读不动新 writer 写出的数据**，这就是破坏向前兼容。
+>
+> 可以把它记成一句更顺口的话：**新增字段时，麻烦在“新代码回头读旧数据”；删除字段时，麻烦在“旧代码向前读新数据”。**
 
 在某些编程语言中，`null` 是任何变量的可接受默认值，但在 Avro 中不是这样：如果你想允许字段为 null，你必须使用 *联合类型*。例如，`union { null, long, string } field;` 表示 `field` 可以是数字、字符串或 null。只有当 `null` 是联合的第一个分支时，你才能将其用作默认值。这比默认情况下一切都可为空更冗长一些，但它通过明确什么可以和不能为 null 来帮助防止错误 [^18]。
 
-更改字段的数据类型是可能的，前提是 Avro 可以转换该类型。更改字段的名称是可能的，但有点棘手：读取者模式可以包含字段名的别名，因此它可以将旧写入者的模式字段名与别名匹配。这意味着更改字段名是向后兼容的，但不是向前兼容的。同样，向联合类型添加分支是向后兼容的，但不是向前兼容的。
+更改字段的数据类型是可能的，前提是 Avro 可以转换该类型。更改字段名也是可能的，但有点棘手：*reader schema* 可以包含字段名别名，因此它可以把旧 *writer schema* 里的字段名与别名匹配起来。这意味着更改字段名是向后兼容的，但不是向前兼容的。同样，向联合类型添加分支是向后兼容的，但不是向前兼容的。
 
-#### 但什么是写入者模式？ {#but-what-is-the-writers-schema}
+#### 但什么是 writer schema？ {#but-what-is-the-writers-schema}
 
-到目前为止，我们忽略了一个重要问题：读取者如何知道特定数据是用哪个写入者模式编码的？我们不能只在每条记录中包含整个模式，因为模式可能比编码数据大得多，使二进制编码节省的所有空间都白费了。
+到目前为止，我们忽略了一个重要问题：读取方如何知道某条数据是用哪个 *writer schema* 编码的？我们不能只在每条记录里都包含整个 schema，因为 schema 可能比编码后的数据本身还大，这会把二进制编码节省下来的空间全部浪费掉。
 
 答案取决于 Avro 的使用环境。举几个例子：
 
