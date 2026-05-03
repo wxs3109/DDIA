@@ -189,19 +189,19 @@ db.users.aggregate([
 ])
 ```
 
-> [!NOTE] Wenbo 注
+> [!CAUTION] Wenbo 注
 > 可以把这段看成“两步走”：
-> 
+>
 > 1. `{ $match: { _id: 251 } }`：先从 `users` 集合里找到 `_id = 251` 的用户。
 > 2. `{ $lookup: { ... } }`：再拿这个用户文档里的 `region_id`，去 `regions` 集合里找对应地区。
-> 
+>
 > 其中：
-> 
+>
 > * `from: "regions"` 表示要去查的目标集合是 `regions`。
 > * `localField: "region_id"` 表示当前用户文档里参与匹配的字段是 `region_id`。
 > * `foreignField: "_id"` 表示在 `regions` 集合里，用 `_id` 字段和它对上。
 > * `as: "region"` 表示把查到的结果放到输出文档的 `region` 字段里。
-> 
+>
 > 所以它的效果相当于关系数据库里的 join：先找到用户，再把这个用户所属地区的信息拼回来。
 
 #### normalization 的权衡 {#trade-offs-of-normalization}
@@ -443,7 +443,7 @@ db.observations.aggregate([
 
 * Facebook 维护一个包含许多不同类型顶点和边的单一图：顶点表示人员、位置、事件、签到和用户发表的评论；边表示哪些人彼此是朋友、哪个签到发生在哪个位置、谁评论了哪个帖子、谁参加了哪个事件等等 [^33]。
 
-> [!NOTE] Wenbo 注
+> [!CAUTION] Wenbo 注
 > 这里说的 Facebook graph 可以理解为一个巨大的、异构的 social graph：不是只有“用户之间的好友关系”，而是把用户、page、group、post、comment、photo、event、place 等都当成 vertex，把 friend、like、commented_on、member_of、checked_in_at、tagged_in、attends 等都当成 edge。这样一来，Facebook 不是在维护很多彼此孤立的表，而是在维护一张可以不断扩展的关系网络。
 >
 > 这张 graph 的规模会非常大。粗略想象一下：几十亿用户本身就是几十亿个 vertex；每个用户有好友、关注、加入的 group、点赞过的 page、发过的 post、写过的 comment、上传过的 photo、参加过的 event，这些都会产生大量 edge 和额外 vertex。所以真实系统里不是“一台机器上放一张图”，而是分片、复制、缓存，并且按访问模式优化。Facebook 的 TAO 系统就是为了服务这种 social graph 读写而设计的：它把 graph 看成对象和 association，支持高吞吐的关系查询。
@@ -524,7 +524,7 @@ CREATE INDEX edges_heads ON edges (head_vertex);
 > [!NOTE]
 > 图模型的一个限制是边只能将两个顶点相互关联，而relational join table可以通过在单行上具有多个外键引用来表示三元或甚至更高阶的关系。此类关系可以通过为连接表的每一行创建一个额外的顶点，以及到/从该顶点的边，或者使用 *hypergraph* 在图中表示。
 >
-> [!NOTE] Wenbo 注
+> [!CAUTION] Wenbo 注
 > 这里的关键点是：普通 `property graph` 里的 `edge` 通常是 binary relationship，也就是一条边只能连接两个 `vertex`。例如 `Lucy -[:LIVES_IN]-> London`，这条边只表达 Lucy 和 London 两者之间的关系。
 >
 > 但现实里有些关系天然不是“两者之间”的，而是“三者或更多对象共同参与”的。`ternary relationship` 就是三元关系，涉及 3 个 entity。例如：“Wenbo 在 Microsoft 担任 engineer”不是简单的 `Wenbo -> Microsoft` 就够了，因为 `role = engineer` 也是这个事实的一部分。再比如：“Alice 在 Store A 购买 Product B”，这里至少有 `Alice`、`Store A`、`Product B` 三个参与者；如果还加上 `time`、`price`、`coupon`，它就变成 higher-order relationship。
@@ -585,7 +585,7 @@ RETURN person.name
 
 但等效地，你可以从两个 `Location` 顶点开始并向后工作。如果 `name` 属性上有索引，你可以有效地找到表示美国和欧洲的两个顶点。然后你可以通过跟随所有传入的 `WITHIN` 边来查找美国和欧洲各自的所有位置（州、地区、城市等）。最后，你可以寻找可以通过位置顶点之一的传入 `BORN_IN` 或 `LIVES_IN` 边找到的人。
 
-> [!NOTE] Wenbo 注
+> [!CAUTION] Wenbo 注
 > 这个 Cypher 查询本身没有指定“必须用 BFS”或“必须用 DFS”。Cypher 是 declarative query language：你写的是要匹配的 graph pattern，具体执行算法由 graph database 的 query planner / query engine 决定。
 >
 > 一个合理的执行思路通常不是先扫描所有 `Person`，而是从选择性更强的点开始。比如 `(:Location {name:'United States'})` 和 `(:Location {name:'Europe'})` 如果在 `name` 上有 index，可以先快速找到这两个 anchor vertex。然后沿着反方向的 `WITHIN` edge 展开，找到所有属于 United States / Europe 的州、城市、地区等。这个展开过程内部可以实现成 BFS、DFS，或者分批 frontier expansion；对用户来说，语义上只要求找到所有满足 `WITHIN*0..` 的可达路径。

@@ -20,8 +20,8 @@ practice/       代码 / 伪代码练习（按主题）
 
 ## Books
 
-| 书名                                            | 目录                        | 状态   |
-| ----------------------------------------------- | --------------------------- | ------ |
+| 书名                                            | 目录                       | 状态   |
+| ----------------------------------------------- | -------------------------- | ------ |
 | Designing Data-Intensive Applications (2nd Ed.) | [books/ddia/](books/ddia/) | 阅读中 |
 
 ## Notes 引用格式
@@ -31,6 +31,17 @@ practice/       代码 / 伪代码练习（按主题）
 ```markdown
 见 [DDIA ch3 — 图数据模型](../../books/ddia/ch3.md#sec_datamodels_graph)
 ```
+
+## Wenbo 注释模板
+
+书稿里的个人注解统一使用 Markdown 原生 alert，所有 `books/` 下的章节都可以复用：
+
+```markdown
+> [!CAUTION] Wenbo 注
+> 这里写注解内容。
+```
+
+`CAUTION` 在 VS Code 和 GitHub Markdown 预览里会显示为红色系提示框，避免 Hugo shortcode 在普通 Markdown 预览中显示为 raw text。
 
 ## Practice 文件命名
 
